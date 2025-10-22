@@ -50,7 +50,6 @@ fn main() -> Result<()> {
 			    Directory(dir) => {
 				for k in dir.keys() {
 				    ls.push(str::from_utf8(&k).unwrap().to_string());
-				    println!("{:?}", k.read());
 				}
 			    },
 			    _ => bail!(""),
