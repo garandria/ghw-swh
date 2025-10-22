@@ -36,7 +36,7 @@ fn main() -> Result<()> {
 	})
 	.collect();
 
-    let mut data: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
+    let mut data: HashMap<String, HashMap<String, Vec<(String, String)>>> = HashMap::new();
 
     for ori in origins {
 	if let Ok(Some(snp)) = swh_graph_stdlib::find_latest_snp(&graph, ori) {
@@ -45,16 +45,19 @@ fn main() -> Result<()> {
 		    if let Ok(Some(ghw)) = swh_graph_stdlib::fs_resolve_path(&graph, rt, ".github/workflows") {
 			let url = str::from_utf8(&props.message(ori).unwrap()).unwrap().to_string();
 			let tree = fs_ls_tree(&graph, ghw).unwrap();
-			let mut ls: Vec<String> = Vec::new();
+			let mut ls: Vec<(String, String)> = Vec::new();
 			match tree {
 			    Directory(dir) => {
 				for k in dir.keys() {
-				    ls.push(str::from_utf8(&k).unwrap().to_string());
+				    let basename = str::from_utf8(&k).unwrap().to_string().to_string();
+				    let filepath = format!(".github/workflows/{}", basename);
+				    let fileid = fs_resolve_path(&graph, rt, filepath).unwrap().unwrap();
+				    ls.push((basename, props.swhid(fileid).to_string()));
 				}
 			    },
 			    _ => bail!(""),
 			}
-			let mut h: HashMap<String, Vec<String>> = HashMap::new();
+			let mut h: HashMap<String, Vec<(String, String)>> = HashMap::new();
 			h.insert("./github/workflow".to_string(), ls);
 			data.insert(url.to_string(), h);
 		    }
