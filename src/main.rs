@@ -88,7 +88,7 @@ async fn main() -> Result<()> {
 			    _ => bail!("")
 			}
 			let mut h: HashMap<String, HashMap<String, String>> = HashMap::new();
-			h.insert("./github/workflow".to_string(), file_text);
+			h.insert(PATH.to_string(), file_text);
 			data.insert(url.to_string(), h);
 		    }
 		}
