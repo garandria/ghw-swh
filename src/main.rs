@@ -1,5 +1,5 @@
 use std::env;
-use rayon::prelude::*;
+// use rayon::prelude::*;
 use std::path::PathBuf;
 use swh_graph::graph::*;
 use swh_graph::NodeType;
@@ -11,13 +11,26 @@ use std::collections::HashMap;
 use std::*;
 use std::path::Path;
 use serde_json;
+use swh_digestmap::*;
+use hex;
+use reqwest::get;
+use flate2::read::GzDecoder;
+use std::io::Read;
 
-fn main() -> Result<()> {
+const GITHUB_URL: &str = "https://github.com";
+const PATH: &str = ".github/workflows";
+
+
+#[tokio::main]
+async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
-    let gpath = &args[1];
+    let gpath = PathBuf::from(&args[1]);
 
-    let graph = swh_graph::graph::load_full::<swh_graph::mph::DynMphf>(PathBuf::from(gpath))
+    let graph = swh_graph::graph::load_full::<swh_graph::mph::DynMphf>(gpath)
 	.expect("Could not load graph");
+
+    let digestmap = DigestMap::new(&PathBuf::from(&args[1]).parent().unwrap().join("digestmap")).unwrap();
+
     let props = graph.properties();
 
     let origins: Vec<usize> = (0..graph.num_nodes())
@@ -26,7 +39,7 @@ fn main() -> Result<()> {
 	.filter(|&node| {
             if let Some(bytes) = props.message(node) {
 		if let Ok(url) = str::from_utf8(&bytes) {
-                    url.starts_with("https://github.com")
+                    url.starts_with(GITHUB_URL)
 		} else {
                     false
 		}
@@ -36,29 +49,46 @@ fn main() -> Result<()> {
 	})
 	.collect();
 
-    let mut data: HashMap<String, HashMap<String, Vec<(String, String)>>> = HashMap::new();
+    let mut data: HashMap<String, HashMap<String, HashMap<String, String>>> = HashMap::new();
 
     for ori in origins {
 	if let Ok(Some(snp)) = swh_graph_stdlib::find_latest_snp(&graph, ori) {
 	    if let Ok(Some(hd)) = swh_graph_stdlib::find_head_rev(&graph, snp.0) {
 		if let Ok(Some(rt)) = swh_graph_stdlib::find_root_dir(&graph, hd) {
-		    if let Ok(Some(ghw)) = swh_graph_stdlib::fs_resolve_path(&graph, rt, ".github/workflows") {
+		    if let Ok(Some(ghw)) = swh_graph_stdlib::fs_resolve_path(&graph, rt, PATH) {
 			let url = str::from_utf8(&props.message(ori).unwrap()).unwrap().to_string();
+			println!("- Processing {}", url);
 			let tree = fs_ls_tree(&graph, ghw).unwrap();
-			let mut ls: Vec<(String, String)> = Vec::new();
+			let mut file_text: HashMap<String, String> = HashMap::new();
 			match tree {
 			    Directory(dir) => {
 				for k in dir.keys() {
 				    let basename = str::from_utf8(&k).unwrap().to_string().to_string();
-				    let filepath = format!(".github/workflows/{}", basename);
+				    let filepath = format!("{}/{}", PATH, basename);
 				    let fileid = fs_resolve_path(&graph, rt, filepath).unwrap().unwrap();
-				    ls.push((basename, props.swhid(fileid).to_string()));
+				    let fileswhid = props.swhid(fileid);
+				    let filetext = match fileswhid.node_type {
+					NodeType::Content => {
+					    let sha1 = digestmap.sha1_from_string_swhid(&fileswhid.to_string())?.expect("");
+					    let sha1_hex = hex::encode(sha1.0);
+					    let amazonurl = format!("https://softwareheritage.s3.amazonaws.com/content/{}", sha1_hex);
+					    let resp = get(&amazonurl).await?.bytes().await?;
+					    let mut decoder = GzDecoder::new(&resp[..]);
+					    let mut content = Vec::new();
+					    match decoder.read_to_end(&mut content) {
+						Ok(_) => String::from_utf8_lossy(&content).to_string(),
+						_ => "ERROR".to_string()
+					    }
+					},
+					_ => "directory".to_string()
+				    };
+				    file_text.insert(basename.to_string(), filetext);
 				}
 			    },
-			    _ => bail!(""),
+			    _ => bail!("")
 			}
-			let mut h: HashMap<String, Vec<(String, String)>> = HashMap::new();
-			h.insert("./github/workflow".to_string(), ls);
+			let mut h: HashMap<String, HashMap<String, String>> = HashMap::new();
+			h.insert("./github/workflow".to_string(), file_text);
 			data.insert(url.to_string(), h);
 		    }
 		}
