@@ -11,25 +11,17 @@ use std::collections::HashMap;
 use std::*;
 use std::path::Path;
 use serde_json;
-use swh_digestmap::*;
-use hex;
-use reqwest::get;
-use flate2::read::GzDecoder;
-use std::io::Read;
 
 const GITHUB_URL: &str = "https://github.com";
 const PATH: &str = ".github/workflows";
 
-
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     let gpath = PathBuf::from(&args[1]);
+    let fspath = &args[2];
 
     let graph = swh_graph::graph::load_full::<swh_graph::mph::DynMphf>(gpath)
 	.expect("Could not load graph");
-
-    let digestmap = DigestMap::new(&PathBuf::from(&args[1]).parent().unwrap().join("digestmap")).unwrap();
 
     let props = graph.properties();
 
@@ -68,18 +60,7 @@ async fn main() -> Result<()> {
 				    let fileid = fs_resolve_path(&graph, rt, filepath).unwrap().unwrap();
 				    let fileswhid = props.swhid(fileid);
 				    let filetext = match fileswhid.node_type {
-					NodeType::Content => {
-					    let sha1 = digestmap.sha1_from_string_swhid(&fileswhid.to_string())?.expect("");
-					    let sha1_hex = hex::encode(sha1.0);
-					    let amazonurl = format!("https://softwareheritage.s3.amazonaws.com/content/{}", sha1_hex);
-					    let resp = get(&amazonurl).await?.bytes().await?;
-					    let mut decoder = GzDecoder::new(&resp[..]);
-					    let mut content = Vec::new();
-					    match decoder.read_to_end(&mut content) {
-						Ok(_) => String::from_utf8_lossy(&content).to_string(),
-						_ => "ERROR".to_string()
-					    }
-					},
+					NodeType::Content => fs::read_to_string(format!("{}/archive/{}", fspath, fileswhid))?,
 					_ => "directory".to_string()
 				    };
 				    file_text.insert(basename.to_string(), filetext);
