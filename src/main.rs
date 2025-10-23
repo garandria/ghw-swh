@@ -59,6 +59,7 @@ fn main() -> Result<()> {
 				    let filepath = format!("{}/{}", PATH, basename);
 				    let fileid = fs_resolve_path(&graph, rt, filepath).unwrap().unwrap();
 				    let fileswhid = props.swhid(fileid);
+				    println!("  * {} {}", basename, fileswhid);
 				    let filetext = match fileswhid.node_type {
 					NodeType::Content => fs::read_to_string(format!("{}/archive/{}", fspath, fileswhid))?,
 					_ => "directory".to_string()
