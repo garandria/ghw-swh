@@ -36,6 +36,8 @@ fn main() -> Result<()> {
 	})
 	.collect();
 
+    let ghnum = origins.len();
+    println!("- GitHub origins identified: {}", ghnum);
     let mut data: HashMap<String, HashMap<String, Vec<(String, String)>>> = HashMap::new();
 
     for ori in origins {
@@ -67,7 +69,7 @@ fn main() -> Result<()> {
 	    }
 	}
     }
-
+    println!("- GitHub origins kept: {}/{}", data.len(), ghnum);
     let path = Path::new("projects.json");
     fs::write(path, serde_json::to_string_pretty(&data)?)?;
     Ok(())
