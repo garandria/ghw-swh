@@ -44,22 +44,24 @@ fn main() -> Result<()> {
 		if let Ok(Some(rt)) = swh_graph_stdlib::find_root_dir(&graph, hd) {
 		    if let Ok(Some(ghw)) = swh_graph_stdlib::fs_resolve_path(&graph, rt, ".github/workflows") {
 			let url = str::from_utf8(&props.message(ori).unwrap()).unwrap().to_string();
-			let tree = fs_ls_tree(&graph, ghw).unwrap();
-			let mut ls: Vec<(String, String)> = Vec::new();
-			match tree {
-			    Directory(dir) => {
-				for k in dir.keys() {
-				    let basename = str::from_utf8(&k).unwrap().to_string().to_string();
-				    let filepath = format!(".github/workflows/{}", basename);
-				    let fileid = fs_resolve_path(&graph, rt, filepath).unwrap().unwrap();
-				    ls.push((basename, props.swhid(fileid).to_string()));
-				}
-			    },
-			    _ => bail!(""),
+			if let Ok(tree) = fs_ls_tree(&graph, ghw) {
+			    println!("* Processing {}", url);
+			    let mut ls: Vec<(String, String)> = Vec::new();
+			    match tree {
+				Directory(dir) => {
+				    for k in dir.keys() {
+					let basename = str::from_utf8(&k).unwrap().to_string().to_string();
+					let filepath = format!(".github/workflows/{}", basename);
+					let fileid = fs_resolve_path(&graph, rt, filepath).unwrap().unwrap();
+					ls.push((basename, props.swhid(fileid).to_string()));
+				    }
+				},
+				_ => bail!(""),
+			    }
+			    let mut h: HashMap<String, Vec<(String, String)>> = HashMap::new();
+			    h.insert("./github/workflow".to_string(), ls);
+			    data.insert(url.to_string(), h);
 			}
-			let mut h: HashMap<String, Vec<(String, String)>> = HashMap::new();
-			h.insert("./github/workflow".to_string(), ls);
-			data.insert(url.to_string(), h);
 		    }
 		}
 	    }
